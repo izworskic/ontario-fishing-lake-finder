@@ -1,0 +1,20 @@
+name: Source smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/source-smoke.js'
+      - '.github/workflows/source-smoke.yml'
+  schedule:
+    - cron: '17 11 * * 1'
+  workflow_dispatch:
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/source-smoke.js
