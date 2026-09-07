@@ -1,0 +1,16 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=900, stale-while-revalidate=3600" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/ontario-fishing-lake-finder", "destination": "/" },
+    { "source": "/ontario-fishing-lake-finder/(.*)", "destination": "/$1" }
+  ]
+}
