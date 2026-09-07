@@ -1,0 +1,68 @@
+name: Vercel production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'package.json'
+      - 'vercel.json'
+      - '.github/workflows/vercel-production.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_SCOPE: izworski-gmailcoms-projects
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test release
+        run: npm test
+
+      - name: Require Vercel token
+        shell: bash
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN secret is not configured."
+            exit 1
+          fi
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy production
+        id: deploy
+        shell: bash
+        run: |
+          url=$(vercel deploy --prod --yes --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Production deployment: $url"
+
+      - name: Verify health endpoint
+        shell: bash
+        run: |
+          url='${{ steps.deploy.outputs.url }}'
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 "$url/api/health"
+
+      - name: Verify live Ontario lake search
+        shell: bash
+        run: |
+          url='${{ steps.deploy.outputs.url }}'
+          body=$(curl --fail --silent --show-error --retry 5 --retry-delay 3 "$url/api/lakes?species=Brook%20Trout&thermal=cold&limit=3")
+          node -e 'const d=JSON.parse(process.argv[1]); if(!Array.isArray(d.lakes)||d.lakes.length===0) process.exit(1); console.log(`Verified ${d.lakes.length} live lake results`)' "$body"
