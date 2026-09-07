@@ -59,7 +59,8 @@ test('API has a dedicated viewport coverage mode and reports candidate/list coun
   assert.match(apiText, /mode === 'map'/);
   assert.match(apiText, /candidateCount/);
   assert.match(apiText, /listCount/);
-  assert.match(apiText, /Complete matching-lake coverage for the current map viewport/);
+  assert.match(apiText, /Complete Ontario Waterbody Location Identifier lake coverage for the current map viewport/);
+  assert.match(apiText, /Complete matching fisheries-record lake coverage for the current map viewport/);
   assert.match(apiText, /lakes are never silently omitted/i);
   assert.match(apiText, /mapViewport\(filters/);
 });
