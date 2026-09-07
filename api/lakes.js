@@ -1,4 +1,5 @@
 const { clean, num, searchLakes, lakeDetail, sourceManifest } = require('../lib/core');
+const { roadEventContext, applyRoadEventPenalty, EVENTS_URL } = require('../lib/ontario511');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -13,9 +14,15 @@ module.exports = async function handler(req, res) {
 
   try {
     if (mode === 'detail') {
-      const lake = await lakeDetail(req.query?.id, species);
+      let lake = await lakeDetail(req.query?.id, species);
       if (!lake) return res.status(404).json({ error: 'Lake not found in Ontario ARA data' });
-      return res.status(200).json({ fetchedAt: new Date().toISOString(), lake, sources: sourceManifest() });
+      if (Number.isFinite(lake.latitude) && Number.isFinite(lake.longitude)) {
+        const roadEvents = await roadEventContext(lake.latitude, lake.longitude, 60);
+        lake = applyRoadEventPenalty(lake, roadEvents);
+      }
+      const sources = sourceManifest();
+      sources.ontario511Events = { url: EVENTS_URL, role: 'current Ontario 511 traffic events and closures near the selected lake; proximity is not route proof' };
+      return res.status(200).json({ fetchedAt: new Date().toISOString(), lake, sources });
     }
 
     const limit = Math.min(100, Math.max(10, Number(req.query?.limit) || 60));
