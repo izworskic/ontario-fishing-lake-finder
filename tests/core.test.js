@@ -9,9 +9,9 @@ test('species parser de-duplicates source records',()=>{
   assert.deepEqual(core.parseSpecies('Brook Trout; Lake Trout; Brook Trout'),['Brook Trout','Lake Trout']);
 });
 
-test('ARA filters escape apostrophes and preserve target filters',()=>{
+test('ARA filters escape apostrophes and normalize Ontario thermal casing',()=>{
   const w=core.araWhere({species:'Brook Trout',q:"O'Brien",fmz:'10',thermal:'cold'});
-  assert.match(w,/Brook Trout/); assert.match(w,/O''Brien/); assert.match(w,/FISHERIES_MANAGEMENT_ZONE_ID=10/); assert.match(w,/THERMAL_REGIME LIKE 'cold%'/);
+  assert.match(w,/Brook Trout/); assert.match(w,/O''Brien/); assert.match(w,/FISHERIES_MANAGEMENT_ZONE_ID=10/); assert.match(w,/THERMAL_REGIME LIKE 'Cold%'/);
 });
 
 test('ARA normalization preserves Waterbody ID and lake evidence',()=>{
