@@ -1,5 +1,5 @@
 const { clean, num, lakeDetail, sourceManifest } = require('../lib/core');
-const { searchComplete, mapViewport } = require('../lib/catalog');
+const { searchComplete, mapViewport, catalogLakeDetail, hasFisheriesFilters } = require('../lib/catalog');
 const { roadEventContext, applyRoadEventPenalty, EVENTS_URL } = require('../lib/ontario511');
 const { forecastContext, applyForecastToTrip, CITYPAGE_ITEMS } = require('../lib/forecast');
 
@@ -28,12 +28,14 @@ module.exports = async function handler(req, res) {
     originLon,
     maxDistanceKm: maxDistanceRaw === null ? null : maxDistanceRaw
   };
+  const fisheriesMode = hasFisheriesFilters(filters);
 
   try {
     if (mode === 'detail') {
       let lake = await lakeDetail(req.query?.id, species);
-      if (!lake) return res.status(404).json({ error: 'Lake not found in Ontario ARA data' });
-      if (Number.isFinite(lake.latitude) && Number.isFinite(lake.longitude)) {
+      if (!lake) lake = await catalogLakeDetail(req.query?.id);
+      if (!lake) return res.status(404).json({ error: 'Lake not found in Ontario Waterbody Location Identifier data' });
+      if (Number.isFinite(lake.latitude) && Number.isFinite(lake.longitude) && lake.fishEvidenceAvailable !== false) {
         const [roadEvents, forecast] = await Promise.all([
           roadEventContext(lake.latitude, lake.longitude, 60),
           forecastContext(lake.latitude, lake.longitude)
@@ -49,19 +51,23 @@ module.exports = async function handler(req, res) {
 
     if (mode === 'map') {
       const map = await mapViewport(filters, req.query?.bbox, 12000);
+      const allLakes = map.catalogMode === 'all_lakes';
       return res.status(200).json({
         fetchedAt: new Date().toISOString(),
         filters,
         ...map,
         resultSemantics: map.coverageComplete
-          ? 'Complete matching-lake coverage for the current map viewport, deduplicated by Ontario Waterbody Location Identifier.'
-          : 'Viewport coverage hit a declared safety ceiling. Zoom in to retrieve complete matching-lake coverage; lakes are never silently omitted.',
+          ? (allLakes
+              ? 'Complete Ontario Waterbody Location Identifier lake coverage for the current map viewport. Fisheries evidence is an optional enrichment and does not determine whether a catalog lake exists.'
+              : 'Complete matching fisheries-record lake coverage for the current map viewport, deduplicated by Ontario Waterbody Location Identifier.')
+          : 'Viewport coverage hit a declared safety ceiling. Zoom in to retrieve complete lake coverage; lakes are never silently omitted.',
         sources: sourceManifest()
       });
     }
 
     const limit = Math.min(150, Math.max(25, Number(req.query?.limit) || 100));
     const result = await searchComplete(filters, limit);
+    const allLakes = result.catalogMode === 'all_lakes';
     return res.status(200).json({
       fetchedAt: new Date().toISOString(),
       count: result.lakes.length,
@@ -70,10 +76,13 @@ module.exports = async function handler(req, res) {
       coverageComplete: result.coverageComplete,
       sourceFeatureCount: result.sourceFeatureCount,
       sourcePages: result.sourcePages,
+      catalogMode: result.catalogMode,
       filters,
-      resultSemantics: result.coverageComplete
-        ? `Ontario-wide candidate discovery is complete for the active filters. The list shows the best ${result.listCount} of ${result.candidateCount} matching lakes; use the map for complete viewport coverage.`
-        : `Ontario-wide candidate discovery hit a declared source safety ceiling. The list is partial; map viewport queries provide complete coverage when zoomed in.`,
+      resultSemantics: allLakes
+        ? `Ontario Waterbody Location Identifier reports ${result.candidateCount} catalog lakes for the active name/location filters. The list is a bounded discovery list; use the map for complete viewport coverage. Fisheries data is joined only when a fisheries filter is selected or a lake is opened.`
+        : (result.coverageComplete
+            ? `Ontario-wide fisheries-record candidate discovery is complete for the active filters. The list shows the best ${result.listCount} of ${result.candidateCount} matching lakes; use the map for complete viewport coverage.`
+            : 'Ontario-wide fisheries-record discovery hit a declared source safety ceiling. The list is partial; map viewport queries provide complete coverage when zoomed in.'),
       lakes: result.lakes,
       sources: sourceManifest()
     });
