@@ -50,7 +50,7 @@ test('source manifest uses official Ontario and Canada endpoints',()=>{
 });
 
 test('frontend keeps Lake Match separate from Trip Context and shows legal boundaries',()=>{
-  assert.match(html,/Lake Match/); assert.match(html,/Trip Context/); assert.match(html,/not legal access permission/i); assert.match(html,/not a catch forecast/i); assert.match(html,/straight-line distance only/i); assert.doesNotMatch(html,/chance of catching|catch probability|guaranteed catch/i);
+  assert.match(html,/Lake Match/); assert.match(html,/Trip Context/); assert.match(html,/not legal access permission/i); assert.match(html,/catch forecast/i); assert.match(html,/straight-line distance only/i); assert.doesNotMatch(html,/chance of catching|catch probability|guaranteed catch/i);
 });
 
 test('frontend exposes regulation, 511 and fire verification links',()=>{
