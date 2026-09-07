@@ -1,0 +1,12 @@
+{
+  "name": "ontario-fishing-lake-finder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ontario fishing lake discovery and trip intelligence",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
