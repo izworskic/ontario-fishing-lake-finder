@@ -1,0 +1,30 @@
+name: Catalog smoke
+
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'scripts/catalog-smoke.js'
+      - 'tests/**'
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'scripts/catalog-smoke.js'
+  workflow_dispatch:
+
+jobs:
+  catalog-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm test
+      - run: node scripts/catalog-smoke.js
