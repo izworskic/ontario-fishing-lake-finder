@@ -46,8 +46,9 @@ test('frontend defaults to All lakes with no hidden Brook Trout auto-filter', ()
 });
 
 test('catalog lakes without fisheries evidence are not rendered as zero-score lakes', () => {
-  assert.match(html, /matchScore:null/);
   assert.match(html, /Fish evidence unavailable/);
   assert.match(html, /No joined ARA species record shown/);
   assert.match(html, /n!==null&&n!==''/);
+  assert.match(html, /Ontario catalog/);
+  assert.match(html, /isNum\(l\.matchScore\)/);
 });
