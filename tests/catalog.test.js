@@ -55,12 +55,13 @@ test('ArcGIS safety ceiling is explicit rather than silently pretending coverage
   assert.equal(result.complete, false);
 });
 
-test('API has a dedicated viewport coverage mode and reports candidate/list counts separately', () => {
+test('API has dedicated complete-viewport semantics for OHN and fisheries modes', () => {
   assert.match(apiText, /mode === 'map'/);
   assert.match(apiText, /candidateCount/);
   assert.match(apiText, /listCount/);
-  assert.match(apiText, /Complete Ontario Waterbody Location Identifier lake coverage for the current map viewport/);
+  assert.match(apiText, /Complete Ontario Hydro Network lake coverage for the current map viewport/);
   assert.match(apiText, /Complete matching fisheries-record lake coverage for the current map viewport/);
-  assert.match(apiText, /lakes are never silently omitted/i);
+  assert.match(apiText, /does not silently sample lakes/i);
+  assert.match(apiText, /mapOhn\(filters/);
   assert.match(apiText, /mapViewport\(filters/);
 });
