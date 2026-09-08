@@ -38,8 +38,10 @@ test('Remote Trout UI keeps score meanings, legal boundaries and first-party API
   assert.match(html,/not a legal-access or solitude guarantee/i);
   assert.match(html,/No recent stocking record means exactly that; it does not prove a wild population/i);
   assert.match(html,/straight-line only, not drive time/i);
-  assert.doesNotMatch(html,/catch probability/i);
+  assert.match(html,/never becomes catch probability/i);
   assert.match(html,/const API='\/api\/lakes'/);
+  assert.match(html,/const locationBtn=document\.getElementById\('location'\)/);
+  assert.doesNotMatch(html,/\blocation\.addEventListener\(/);
   assert.match(api,/mode === 'remote'/);
   assert.match(api,/searchRemoteTrout/);
 });
