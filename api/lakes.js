@@ -1,6 +1,7 @@
 const { clean, num, lakeDetail, sourceManifest } = require('../lib/core');
 const { searchComplete, mapViewport, catalogLakeDetail, hasFisheriesFilters } = require('../lib/catalog');
 const { searchOhn, mapOhn, ohnLakeDetail, OHN_URL } = require('../lib/ohn');
+const { searchRemoteTrout } = require('../lib/remote');
 const { roadEventContext, applyRoadEventPenalty, EVENTS_URL } = require('../lib/ontario511');
 const { forecastContext, applyForecastToTrip, CITYPAGE_ITEMS } = require('../lib/forecast');
 
@@ -27,11 +28,31 @@ module.exports = async function handler(req, res) {
     minDepth: minDepthRaw === null ? null : minDepthRaw,
     originLat,
     originLon,
-    maxDistanceKm: maxDistanceRaw === null ? null : maxDistanceRaw
+    maxDistanceKm: maxDistanceRaw === null ? null : maxDistanceRaw,
+    stocking: clean(req.query?.stocking, 16).toLowerCase()
   };
   const fisheriesMode = hasFisheriesFilters(filters);
 
   try {
+    if (mode === 'remote') {
+      const limit = Math.min(20, Math.max(6, Number(req.query?.limit) || 12));
+      const result = await searchRemoteTrout(filters, limit);
+      const sources = sourceManifest();
+      sources.ohnWaterbody = { url: OHN_URL, role: 'physical lake geometry context; fisheries evidence remains separate' };
+      return res.status(200).json({
+        fetchedAt: new Date().toISOString(),
+        filters: { ...filters, species: result.species, thermal: filters.thermal || 'cold' },
+        count: result.lakes.length,
+        listCount: result.listCount,
+        candidateCount: result.candidateCount,
+        fisheriesCoverageComplete: result.fisheriesCoverageComplete,
+        remotenessEvaluatedCount: result.remotenessEvaluatedCount,
+        resultSemantics: result.semantics,
+        lakes: result.lakes,
+        sources
+      });
+    }
+
     if (mode === 'detail') {
       const requestedId = clean(req.query?.id, 64);
       let lake = requestedId.startsWith('ohn:') ? await ohnLakeDetail(requestedId) : await lakeDetail(requestedId, species);

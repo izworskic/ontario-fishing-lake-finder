@@ -6,7 +6,7 @@ const checks = [
   },
   {
     name: 'Ontario Waterbody Location Identifier',
-    url: 'https://ws.lioservices.lrc.gov.on.ca/arcgis1071a/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/17/query?where=1%3D1&outFields=WATERBODY_IDENT,LATITUDE_DECIMAL_DEGREES,LONGITUDE_DECIMAL_DEGREES&returnGeometry=false&resultRecordCount=1&f=json',
+    url: 'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/17/query?where=1%3D1&outFields=WATERBODY_IDENT,LATITUDE_DECIMAL_DEGREES,LONGITUDE_DECIMAL_DEGREES&returnGeometry=false&resultRecordCount=1&f=json',
     validate: d => Array.isArray(d.features) && d.features.length > 0 && !d.error
   },
   {
