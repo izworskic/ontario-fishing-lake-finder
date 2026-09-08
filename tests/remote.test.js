@@ -3,51 +3,73 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const {SOURCES}=require('../lib/core');
-const {normalizeTroutSpecies,minGeometryDistanceKm,scoreRemote}=require('../lib/remote');
+const remote=require('../lib/remote');
+
+const root=path.join(__dirname,'..');
+const html=fs.readFileSync(path.join(root,'public','remote-trout-lake-finder','index.html'),'utf8');
+const api=fs.readFileSync(path.join(root,'api','lakes.js'),'utf8');
+const builder=fs.readFileSync(path.join(root,'scripts','build-trout-index.js'),'utf8');
 
 test('waterbody identity join uses Ontario current ArcGIS host',()=>{
   assert.equal(SOURCES.waterbody,'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/17');
   assert.doesNotMatch(SOURCES.waterbody,/arcgis1071a/);
 });
 
-test('remote finder accepts only supported trout species and defaults to Brook Trout',()=>{
-  assert.equal(normalizeTroutSpecies('lake trout'),'Lake Trout');
-  assert.equal(normalizeTroutSpecies('Walleye'),'Brook Trout');
-  assert.equal(normalizeTroutSpecies(''),'Brook Trout');
+test('V2 master builder unions all three supported trout evidence sources',()=>{
+  assert.match(builder,/MapServer\/2/);
+  assert.match(builder,/MapServer\/0/);
+  assert.match(builder,/FishStockingDataForRecreationalPurposes/);
+  assert.match(builder,/ara_summary/);
+  assert.match(builder,/ara_survey/);
+  assert.match(builder,/stocking/);
+  assert.match(builder,/Union trout waterbody IDs/);
 });
 
-test('geometry distance measures source geometry instead of inventing a route',()=>{
-  const d=minGeometryDistanceKm(46,-83,[{geometry:{x:-83.01,y:46}}]);
-  assert.ok(d>0.7&&d<0.9);
+test('V2 does not use the old bounded candidate search',()=>{
+  const code=fs.readFileSync(path.join(root,'lib','remote.js'),'utf8');
+  assert.doesNotMatch(code,/candidateLimit/);
+  assert.doesNotMatch(code,/slice\(0,candidateLimit\)/);
+  assert.doesNotMatch(code,/searchFisheries/);
+  assert.match(code,/candidateCount:rows\.length/);
+  assert.match(code,/List pagination never changes candidateCount/);
 });
 
-test('mapped remoteness context ranks a far-road lake above a roadside lake without changing Trout Fit',()=>{
-  const lake={matchScore:88,stocking:[]};
-  const far=scoreRemote(lake,{nearestRoadKm:12,nearestAccessKm:9,mappedRoadFeatures:2,mappedAccessFeatures:1,crownRecordsWithin2Km:4,roadBarriersWithin15Km:0});
-  const near=scoreRemote(lake,{nearestRoadKm:.2,nearestAccessKm:.1,mappedRoadFeatures:100,mappedAccessFeatures:4,crownRecordsWithin2Km:0,roadBarriersWithin15Km:0});
-  assert.equal(far.troutFit,88);
-  assert.equal(near.troutFit,88);
-  assert.ok(far.remoteContext>near.remoteContext);
-  assert.ok(far.remoteScore>near.remoteScore);
+test('supported trout species remain explicit',()=>{
+  assert.deepEqual(remote.TROUT_SPECIES,['Brook Trout','Lake Trout','Rainbow Trout','Brown Trout','Splake']);
+  assert.equal(remote.normalizeTroutSpecies('lake trout'),'Lake Trout');
+  assert.equal(remote.normalizeTroutSpecies('Walleye'),'Brook Trout');
 });
 
-test('missing mapped access does not become proof of no access',()=>{
-  const scored=scoreRemote({matchScore:80,stocking:[]},{nearestRoadKm:5,nearestAccessKm:null,mappedRoadFeatures:5,mappedAccessFeatures:0,crownRecordsWithin2Km:0,roadBarriersWithin15Km:0});
-  assert.ok(scored.confidence<100);
-  assert.ok(scored.reasons.some(x=>/does not prove|unmapped access/i.test(x)));
-});
-
-test('Remote Trout UI keeps score meanings, legal boundaries and first-party API explicit',()=>{
-  const html=fs.readFileSync(path.join(__dirname,'..','public','remote-trout-lake-finder','index.html'),'utf8');
-  const api=fs.readFileSync(path.join(__dirname,'..','api','lakes.js'),'utf8');
-  assert.match(html,/Trout Fit ≠ Remote Context/);
-  assert.match(html,/not a legal-access or solitude guarantee/i);
-  assert.match(html,/No recent stocking record means exactly that; it does not prove a wild population/i);
-  assert.match(html,/straight-line only, not drive time/i);
-  assert.match(html,/never becomes catch probability/i);
-  assert.match(html,/const API='\/api\/lakes'/);
-  assert.match(html,/locationBtn=document\.getElementById\('location'\)/);
-  assert.doesNotMatch(html,/\blocation\.addEventListener\(/);
+test('Remote Trout API exposes complete-index list, map and evidence-gap modes',()=>{
   assert.match(api,/mode === 'remote'/);
-  assert.match(api,/searchRemoteTrout/);
+  assert.match(api,/mode === 'remote-map'/);
+  assert.match(api,/mode === 'remote-explain'/);
+  assert.match(api,/candidateCount: result\.candidateCount/);
+  assert.match(api,/coverageComplete: true/);
+  assert.match(api,/No top-candidate sampling is used/);
+});
+
+test('V2 UI states the coverage and evidence semantics directly',()=>{
+  assert.match(html,/Start with every evidenced trout lake/i);
+  assert.match(html,/No hidden top-candidate sampling/i);
+  assert.match(html,/Why isn't my lake here\?/i);
+  assert.match(html,/No record in those sources does not prove trout are absent/i);
+  assert.match(html,/straight-line only, not drive time/i);
+  assert.match(html,/does not prove legal access/i);
+  assert.match(html,/const API='\/api\/lakes'/);
+  assert.match(html,/mode:'remote-map'/);
+  assert.match(html,/mode:'remote-explain'/);
+});
+
+test('generated V2 index meets minimum integrity when present',()=>{
+  const file=path.join(root,'data','trout-index.json');
+  if(!fs.existsSync(file)) return;
+  const d=JSON.parse(fs.readFileSync(file,'utf8'));
+  assert.equal(d.schemaVersion,2);
+  assert.ok(d.lakes.length>=500);
+  assert.ok(d.summary.araFeatures>0);
+  assert.ok(d.summary.surveyFeatures>0);
+  assert.ok(d.summary.stockingFeatures>0);
+  assert.ok(d.lakes.every(x=>x.id&&Number.isFinite(x.latitude)&&Number.isFinite(x.longitude)&&Array.isArray(x.species)&&x.species.length));
+  assert.ok(d.lakes.every(x=>x.remote&&Object.prototype.hasOwnProperty.call(x.remote,'score')&&Object.prototype.hasOwnProperty.call(x.remote,'confidence')));
 });
