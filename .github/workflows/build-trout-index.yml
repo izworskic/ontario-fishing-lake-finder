@@ -35,10 +35,13 @@ jobs:
         run: |
           node - <<'NODE'
           const d=require('./data/trout-index.json');
+          if(d.schemaVersion!==2) throw new Error(`Unexpected schema: ${d.schemaVersion}`);
           if(!Array.isArray(d.lakes)||d.lakes.length<500) throw new Error(`Unexpectedly small trout universe: ${d.lakes?.length}`);
           if(!d.summary?.surveyFeatures) throw new Error('ARA survey evidence missing');
           if(!d.summary?.stockingFeatures) throw new Error('Stocking evidence missing');
-          const bad=d.lakes.filter(x=>!x.id||!Number.isFinite(x.latitude)||!Number.isFinite(x.longitude)||!Array.isArray(x.species)||!x.species.length);
+          if(!Number.isFinite(d.summary?.mappable)||d.summary.mappable<500) throw new Error(`Too few mappable trout lakes: ${d.summary?.mappable}`);
+          if(!Number.isFinite(d.summary?.remoteScored)||d.summary.remoteScored<500) throw new Error(`Too few Remote Context scores: ${d.summary?.remoteScored}`);
+          const bad=d.lakes.filter(x=>!x.id||!Array.isArray(x.species)||!x.species.length||!Array.isArray(x.evidence)||!x.evidence.length||!x.remote||!Object.prototype.hasOwnProperty.call(x.remote,'score'));
           if(bad.length) throw new Error(`Invalid trout rows: ${bad.length}`);
           console.log(JSON.stringify(d.summary));
           NODE
