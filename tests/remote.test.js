@@ -2,7 +2,13 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const {SOURCES}=require('../lib/core');
 const {normalizeTroutSpecies,minGeometryDistanceKm,scoreRemote}=require('../lib/remote');
+
+test('waterbody identity join uses Ontario current ArcGIS host',()=>{
+  assert.equal(SOURCES.waterbody,'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/17');
+  assert.doesNotMatch(SOURCES.waterbody,/arcgis1071a/);
+});
 
 test('remote finder accepts only supported trout species and defaults to Brook Trout',()=>{
   assert.equal(normalizeTroutSpecies('lake trout'),'Lake Trout');
