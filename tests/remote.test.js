@@ -40,7 +40,7 @@ test('Remote Trout UI keeps score meanings, legal boundaries and first-party API
   assert.match(html,/straight-line only, not drive time/i);
   assert.match(html,/never becomes catch probability/i);
   assert.match(html,/const API='\/api\/lakes'/);
-  assert.match(html,/const locationBtn=document\.getElementById\('location'\)/);
+  assert.match(html,/locationBtn=document\.getElementById\('location'\)/);
   assert.doesNotMatch(html,/\blocation\.addEventListener\(/);
   assert.match(api,/mode === 'remote'/);
   assert.match(api,/searchRemoteTrout/);
