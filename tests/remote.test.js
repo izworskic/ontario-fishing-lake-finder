@@ -3,51 +3,19 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const {SOURCES}=require('../lib/core');
-const {normalizeTroutSpecies,minGeometryDistanceKm,scoreRemote}=require('../lib/remote');
+const remote=require('../lib/remote');
+const root=path.join(__dirname,'..');
+const html=fs.readFileSync(path.join(root,'public','remote-trout-lake-finder','index.html'),'utf8');
+const api=fs.readFileSync(path.join(root,'api','lakes.js'),'utf8');
+const builder=fs.readFileSync(path.join(root,'scripts','build-trout-index.js'),'utf8');
 
-test('waterbody identity join uses Ontario current ArcGIS host',()=>{
-  assert.equal(SOURCES.waterbody,'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/17');
-  assert.doesNotMatch(SOURCES.waterbody,/arcgis1071a/);
-});
-
-test('remote finder accepts only supported trout species and defaults to Brook Trout',()=>{
-  assert.equal(normalizeTroutSpecies('lake trout'),'Lake Trout');
-  assert.equal(normalizeTroutSpecies('Walleye'),'Brook Trout');
-  assert.equal(normalizeTroutSpecies(''),'Brook Trout');
-});
-
-test('geometry distance measures source geometry instead of inventing a route',()=>{
-  const d=minGeometryDistanceKm(46,-83,[{geometry:{x:-83.01,y:46}}]);
-  assert.ok(d>0.7&&d<0.9);
-});
-
-test('mapped remoteness context ranks a far-road lake above a roadside lake without changing Trout Fit',()=>{
-  const lake={matchScore:88,stocking:[]};
-  const far=scoreRemote(lake,{nearestRoadKm:12,nearestAccessKm:9,mappedRoadFeatures:2,mappedAccessFeatures:1,crownRecordsWithin2Km:4,roadBarriersWithin15Km:0});
-  const near=scoreRemote(lake,{nearestRoadKm:.2,nearestAccessKm:.1,mappedRoadFeatures:100,mappedAccessFeatures:4,crownRecordsWithin2Km:0,roadBarriersWithin15Km:0});
-  assert.equal(far.troutFit,88);
-  assert.equal(near.troutFit,88);
-  assert.ok(far.remoteContext>near.remoteContext);
-  assert.ok(far.remoteScore>near.remoteScore);
-});
-
-test('missing mapped access does not become proof of no access',()=>{
-  const scored=scoreRemote({matchScore:80,stocking:[]},{nearestRoadKm:5,nearestAccessKm:null,mappedRoadFeatures:5,mappedAccessFeatures:0,crownRecordsWithin2Km:0,roadBarriersWithin15Km:0});
-  assert.ok(scored.confidence<100);
-  assert.ok(scored.reasons.some(x=>/does not prove|unmapped access/i.test(x)));
-});
-
-test('Remote Trout UI keeps score meanings, legal boundaries and first-party API explicit',()=>{
-  const html=fs.readFileSync(path.join(__dirname,'..','public','remote-trout-lake-finder','index.html'),'utf8');
-  const api=fs.readFileSync(path.join(__dirname,'..','api','lakes.js'),'utf8');
-  assert.match(html,/Trout Fit ≠ Remote Context/);
-  assert.match(html,/not a legal-access or solitude guarantee/i);
-  assert.match(html,/No recent stocking record means exactly that; it does not prove a wild population/i);
-  assert.match(html,/straight-line only, not drive time/i);
-  assert.match(html,/never becomes catch probability/i);
-  assert.match(html,/const API='\/api\/lakes'/);
-  assert.match(html,/locationBtn=document\.getElementById\('location'\)/);
-  assert.doesNotMatch(html,/\blocation\.addEventListener\(/);
-  assert.match(api,/mode === 'remote'/);
-  assert.match(api,/searchRemoteTrout/);
-});
+test('waterbody identity join uses Ontario current ArcGIS host',()=>{assert.equal(SOURCES.waterbody,'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open08/MapServer/17');assert.doesNotMatch(SOURCES.waterbody,/arcgis1071a/)});
+test('V2 master builder unions all three supported trout evidence sources',()=>{assert.match(builder,/MapServer\/2/);assert.match(builder,/MapServer\/0/);assert.match(builder,/FishStockingDataForRecreationalPurposes/);assert.match(builder,/ara_summary/);assert.match(builder,/ara_survey/);assert.match(builder,/stocking/);assert.match(builder,/Union trout waterbody IDs/)});
+test('V2 builder records species-specific provenance',()=>{assert.match(builder,/evidenceBySpecies/);assert.match(builder,/latestStockingBySpecies/);assert.match(builder,/surveyCountBySpecies/);assert.match(builder,/speciesEvidence/)});
+test('missing numeric values stay missing instead of becoming zero',()=>{assert.equal(remote.num(null),null);assert.equal(remote.num(undefined),null);assert.equal(remote.num(''),null);assert.equal(remote.haversineKm(null,-83,46,-83),null);assert.equal(remote.haversineKm(46,null,46,-83),null)});
+test('V2 does not use the old bounded candidate search',()=>{const code=fs.readFileSync(path.join(root,'lib','remote.js'),'utf8');assert.doesNotMatch(code,/candidateLimit/);assert.doesNotMatch(code,/slice\(0,candidateLimit\)/);assert.doesNotMatch(code,/searchFisheries/);assert.match(code,/candidateCount:rows\.length/);assert.match(code,/List pagination never changes candidateCount/)});
+test('supported trout species remain explicit',()=>{assert.deepEqual(remote.TROUT_SPECIES,['Brook Trout','Lake Trout','Rainbow Trout','Brown Trout','Splake']);assert.equal(remote.normalizeTroutSpecies('lake trout'),'Lake Trout');assert.equal(remote.normalizeTroutSpecies('Walleye'),'Brook Trout')});
+test('species evidence cannot leak across trout species',()=>{const lake={species:['Brook Trout','Lake Trout'],evidence:['ara_summary','stocking'],evidenceBySpecies:{'Brook Trout':['stocking'],'Lake Trout':['ara_summary']},latestStockingBySpecies:{'Brook Trout':{species:'Brook Trout',year:2026}},surveyCountBySpecies:{'Brook Trout':0,'Lake Trout':0},thermalRegime:null,maximumDepthM:null};assert.deepEqual(remote.targetEvidence(lake,'Brook Trout'),['stocking']);assert.deepEqual(remote.targetEvidence(lake,'Lake Trout'),['ara_summary']);assert.equal(remote.troutFit(lake,'Brook Trout').score,20);assert.equal(remote.troutFit(lake,'Lake Trout').score,50)});
+test('Remote Trout API exposes complete-index list, map and evidence-gap modes',()=>{assert.match(api,/mode === 'remote'/);assert.match(api,/mode === 'remote-map'/);assert.match(api,/mode === 'remote-explain'/);assert.match(api,/candidateCount: result\.candidateCount/);assert.match(api,/coverageComplete: true/);assert.match(api,/No top-candidate sampling is used/)});
+test('V2 UI states coverage, missing-context and evidence semantics directly',()=>{assert.match(html,/full indexed trout-lake evidence union/i);assert.match(html,/No hidden top-candidate sampling/i);assert.match(html,/Why isn't my lake here\?/i);assert.match(html,/No indexed record does not prove trout are absent/i);assert.match(html,/straight-line only, not drive time/i);assert.match(html,/does not prove legal access/i);assert.match(html,/Missing Remote Context does not remove an evidenced lake/i);assert.match(html,/targetEvidence/);assert.match(html,/targetSurveyCount/);assert.match(html,/targetLatestStocking/);assert.match(html,/hasCoords/);assert.match(html,/const API='\/api\/lakes'/);assert.match(html,/mode:'remote-map'/);assert.match(html,/mode:'remote-explain'/)});
+test('generated V2 index accounts for the entire evidence union',()=>{const file=path.join(root,'data','trout-index.json');assert.ok(fs.existsSync(file),'V2 release requires generated trout-index.json');const d=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(d.schemaVersion,2);assert.equal(d.summary.unionWaterbodyIds,6538);assert.equal(d.summary.lakes,5651);assert.equal(d.summary.mappable,5649);assert.equal(d.summary.remoteScored,5649);assert.equal(d.summary.unmapped,2);assert.equal(d.summary.excludedNonLake,887);assert.equal(d.summary.excludedUncertain,0);assert.equal(d.summary.lakes+d.summary.excludedNonLake+d.summary.excludedUncertain,d.summary.unionWaterbodyIds);assert.equal(d.summary.mappable+d.summary.unmapped,d.summary.lakes);assert.deepEqual(d.summary.bySpecies,{'Brook Trout':3414,'Lake Trout':2368,'Rainbow Trout':459,'Brown Trout':58,'Splake':509});assert.ok(d.summary.araFeatures>0);assert.ok(d.summary.surveyFeatures>0);assert.ok(d.summary.stockingFeatures>0);assert.ok(d.lakes.every(x=>x.id&&Array.isArray(x.species)&&x.species.length&&Array.isArray(x.evidence)&&x.evidence.length&&x.evidenceBySpecies&&x.remote&&Object.prototype.hasOwnProperty.call(x.remote,'score')&&Object.prototype.hasOwnProperty.call(x.remote,'confidence')));for(const lake of d.lakes)for(const s of lake.species)assert.ok(Array.isArray(lake.evidenceBySpecies[s])&&lake.evidenceBySpecies[s].length,`${lake.id} ${s} missing species provenance`)});

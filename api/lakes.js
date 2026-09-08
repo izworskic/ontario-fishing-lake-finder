@@ -1,7 +1,7 @@
 const { clean, num, lakeDetail, sourceManifest } = require('../lib/core');
-const { searchComplete, mapViewport, catalogLakeDetail, hasFisheriesFilters } = require('../lib/catalog');
+const { searchComplete, searchMaster, mapViewport, catalogLakeDetail, hasFisheriesFilters } = require('../lib/catalog');
 const { searchOhn, mapOhn, ohnLakeDetail, OHN_URL } = require('../lib/ohn');
-const { searchRemoteTrout } = require('../lib/remote');
+const { searchRemoteTrout, remoteMap, findInIndex } = require('../lib/remote');
 const { roadEventContext, applyRoadEventPenalty, EVENTS_URL } = require('../lib/ontario511');
 const { forecastContext, applyForecastToTrip, CITYPAGE_ITEMS } = require('../lib/forecast');
 
@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const mode = clean(req.query?.mode || 'search', 16);
+  const mode = clean(req.query?.mode || 'search', 24);
   const species = clean(req.query?.species, 64);
   const originLat = num(req.query?.originLat);
   const originLon = num(req.query?.originLon);
@@ -29,27 +29,71 @@ module.exports = async function handler(req, res) {
     originLat,
     originLon,
     maxDistanceKm: maxDistanceRaw === null ? null : maxDistanceRaw,
-    stocking: clean(req.query?.stocking, 16).toLowerCase()
+    stocking: clean(req.query?.stocking, 16).toLowerCase(),
+    remote: clean(req.query?.remote, 16).toLowerCase(),
+    minRemote: num(req.query?.minRemote),
+    sort: clean(req.query?.sort, 16).toLowerCase()
   };
   const fisheriesMode = hasFisheriesFilters(filters);
 
   try {
     if (mode === 'remote') {
-      const limit = Math.min(20, Math.max(6, Number(req.query?.limit) || 12));
-      const result = await searchRemoteTrout(filters, limit);
+      const limit = Math.min(250, Math.max(1, Number(req.query?.limit) || 50));
+      const offset = Math.max(0, Number(req.query?.offset) || 0);
+      const result = searchRemoteTrout(filters, { limit, offset });
       const sources = sourceManifest();
-      sources.ohnWaterbody = { url: OHN_URL, role: 'physical lake geometry context; fisheries evidence remains separate' };
+      sources.ohnWaterbody = { url: OHN_URL, role: 'physical-lake geometry context; trout evidence remains separate' };
       return res.status(200).json({
         fetchedAt: new Date().toISOString(),
-        filters: { ...filters, species: result.species, thermal: filters.thermal || 'cold' },
+        filters: { ...filters, species: result.species },
         count: result.lakes.length,
         listCount: result.listCount,
         candidateCount: result.candidateCount,
-        fisheriesCoverageComplete: result.fisheriesCoverageComplete,
-        remotenessEvaluatedCount: result.remotenessEvaluatedCount,
+        indexLakeCount: result.indexLakeCount,
+        indexBuiltAt: result.indexBuiltAt,
+        indexSummary: result.indexSummary,
+        offset: result.offset,
+        hasMore: result.hasMore,
+        coverageComplete: true,
         resultSemantics: result.semantics,
         lakes: result.lakes,
         sources
+      });
+    }
+
+    if (mode === 'remote-map') {
+      const map = remoteMap(filters, clean(req.query?.bbox, 128), 12000);
+      return res.status(200).json({
+        fetchedAt: new Date().toISOString(),
+        filters: { ...filters, species: map.species },
+        ...map,
+        resultSemantics: map.coverageComplete
+          ? 'Complete matching trout-index coverage for the current viewport. No top-candidate sampling is used.'
+          : `The viewport contains ${map.matchedInView} matching trout lakes, above the safe marker ceiling. Zoom in; the tool does not silently sample and claim completeness.`
+      });
+    }
+
+    if (mode === 'remote-explain') {
+      const q = clean(req.query?.q, 80);
+      if (!q) return res.status(400).json({ error: 'Lake name is required' });
+      const [catalog, indexed] = await Promise.all([
+        searchMaster({ q }, 50),
+        Promise.resolve(findInIndex(q))
+      ]);
+      const byId = new Map(indexed.map(x => [x.id, x]));
+      const lakes = catalog.lakes.map(lake => ({
+        ...lake,
+        troutIndex: byId.get(lake.id) || null,
+        explanation: byId.has(lake.id)
+          ? 'This lake is present in the Ontario trout master index. Its trout evidence sources are shown in troutIndex.evidence.'
+          : 'This lake exists in the Ontario Waterbody Location Identifier lake catalog, but no supported trout evidence was found in the current ARA summary, ARA survey-point, or recreational stocking index.'
+      }));
+      return res.status(200).json({
+        fetchedAt: new Date().toISOString(),
+        q,
+        count: lakes.length,
+        lakes,
+        resultSemantics: 'Absence from the trout index means no supported trout evidence was found in the indexed official sources. It does not prove trout are absent.'
       });
     }
 

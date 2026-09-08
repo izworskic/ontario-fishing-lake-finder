@@ -1,0 +1,56 @@
+name: Build trout master index
+
+on:
+  push:
+    branches:
+      - feature/remote-trout-v2-master-index
+    paths:
+      - 'scripts/build-trout-index.js'
+      - '.github/workflows/build-trout-index.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * 1'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trout-master-index
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build complete trout index
+        run: node scripts/build-trout-index.js
+      - name: Validate generated index
+        run: |
+          node - <<'NODE'
+          const d=require('./data/trout-index.json');
+          if(d.schemaVersion!==2) throw new Error(`Unexpected schema: ${d.schemaVersion}`);
+          if(!Array.isArray(d.lakes)||d.lakes.length<500) throw new Error(`Unexpectedly small trout universe: ${d.lakes?.length}`);
+          if(!d.summary?.surveyFeatures) throw new Error('ARA survey evidence missing');
+          if(!d.summary?.stockingFeatures) throw new Error('Stocking evidence missing');
+          if(!Number.isFinite(d.summary?.mappable)||d.summary.mappable<500) throw new Error(`Too few mappable trout lakes: ${d.summary?.mappable}`);
+          if(!Number.isFinite(d.summary?.remoteScored)||d.summary.remoteScored<500) throw new Error(`Too few Remote Context scores: ${d.summary?.remoteScored}`);
+          const bad=d.lakes.filter(x=>!x.id||!Array.isArray(x.species)||!x.species.length||!Array.isArray(x.evidence)||!x.evidence.length||!x.remote||!Object.prototype.hasOwnProperty.call(x.remote,'score'));
+          if(bad.length) throw new Error(`Invalid trout rows: ${bad.length}`);
+          console.log(JSON.stringify(d.summary));
+          NODE
+      - name: Commit refreshed index
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/trout-index.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh Ontario trout master index [skip ci]'
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin HEAD:${{ github.ref_name }}
