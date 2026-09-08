@@ -7,7 +7,9 @@ on:
       - 'lib/**'
       - 'public/**'
       - 'scripts/catalog-smoke.js'
+      - 'scripts/remote-smoke.js'
       - 'tests/**'
+      - '.github/workflows/catalog-smoke.yml'
   push:
     branches: [main]
     paths:
@@ -15,12 +17,14 @@ on:
       - 'lib/**'
       - 'public/**'
       - 'scripts/catalog-smoke.js'
+      - 'scripts/remote-smoke.js'
+      - '.github/workflows/catalog-smoke.yml'
   workflow_dispatch:
 
 jobs:
   catalog-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,3 +32,4 @@ jobs:
           node-version: 20
       - run: npm test
       - run: node scripts/catalog-smoke.js
+      - run: node scripts/remote-smoke.js
