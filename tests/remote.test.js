@@ -18,4 +18,31 @@ test('supported trout species remain explicit',()=>{assert.deepEqual(remote.TROU
 test('species evidence cannot leak across trout species',()=>{const lake={species:['Brook Trout','Lake Trout'],evidence:['ara_summary','stocking'],evidenceBySpecies:{'Brook Trout':['stocking'],'Lake Trout':['ara_summary']},latestStockingBySpecies:{'Brook Trout':{species:'Brook Trout',year:2026}},surveyCountBySpecies:{'Brook Trout':0,'Lake Trout':0},thermalRegime:null,maximumDepthM:null};assert.deepEqual(remote.targetEvidence(lake,'Brook Trout'),['stocking']);assert.deepEqual(remote.targetEvidence(lake,'Lake Trout'),['ara_summary']);assert.equal(remote.troutFit(lake,'Brook Trout').score,20);assert.equal(remote.troutFit(lake,'Lake Trout').score,50)});
 test('Remote Trout API exposes complete-index list, map and evidence-gap modes',()=>{assert.match(api,/mode === 'remote'/);assert.match(api,/mode === 'remote-map'/);assert.match(api,/mode === 'remote-explain'/);assert.match(api,/candidateCount: result\.candidateCount/);assert.match(api,/coverageComplete: true/);assert.match(api,/No top-candidate sampling is used/)});
 test('V2 UI states coverage, missing-context and evidence semantics directly',()=>{assert.match(html,/full indexed trout-lake evidence union/i);assert.match(html,/No hidden top-candidate sampling/i);assert.match(html,/Why isn't my lake here\?/i);assert.match(html,/No indexed record does not prove trout are absent/i);assert.match(html,/straight-line only, not drive time/i);assert.match(html,/does not prove legal access/i);assert.match(html,/Missing Remote Context does not remove an evidenced lake/i);assert.match(html,/targetEvidence/);assert.match(html,/targetSurveyCount/);assert.match(html,/targetLatestStocking/);assert.match(html,/hasCoords/);assert.match(html,/const API='\/api\/lakes'/);assert.match(html,/mode:'remote-map'/);assert.match(html,/mode:'remote-explain'/)});
-test('generated V2 index accounts for the entire evidence union',()=>{const file=path.join(root,'data','trout-index.json');assert.ok(fs.existsSync(file),'V2 release requires generated trout-index.json');const d=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(d.schemaVersion,2);assert.equal(d.summary.unionWaterbodyIds,6538);assert.equal(d.summary.lakes,5651);assert.equal(d.summary.mappable,5649);assert.equal(d.summary.remoteScored,5649);assert.equal(d.summary.unmapped,2);assert.equal(d.summary.excludedNonLake,887);assert.equal(d.summary.excludedUncertain,0);assert.equal(d.summary.lakes+d.summary.excludedNonLake+d.summary.excludedUncertain,d.summary.unionWaterbodyIds);assert.equal(d.summary.mappable+d.summary.unmapped,d.summary.lakes);assert.deepEqual(d.summary.bySpecies,{'Brook Trout':3414,'Lake Trout':2368,'Rainbow Trout':459,'Brown Trout':58,'Splake':509});assert.ok(d.summary.araFeatures>0);assert.ok(d.summary.surveyFeatures>0);assert.ok(d.summary.stockingFeatures>0);assert.ok(d.lakes.every(x=>x.id&&Array.isArray(x.species)&&x.species.length&&Array.isArray(x.evidence)&&x.evidence.length&&x.evidenceBySpecies&&x.remote&&Object.prototype.hasOwnProperty.call(x.remote,'score')&&Object.prototype.hasOwnProperty.call(x.remote,'confidence')));for(const lake of d.lakes)for(const s of lake.species)assert.ok(Array.isArray(lake.evidenceBySpecies[s])&&lake.evidenceBySpecies[s].length,`${lake.id} ${s} missing species provenance`)});
+test('generated V2 index accounts for the entire evidence union', () => {
+  const file = path.join(root, 'data', 'trout-index.json');
+  assert.ok(fs.existsSync(file), 'V2 release requires generated trout-index.json');
+  const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(d.schemaVersion, 2);
+  // Scheduled source refreshes may add/remove lakes. Reconcile the actual rows,
+  // rather than pinning the first release's counts forever.
+  assert.ok(d.lakes.length > 5000, 'unexpected collapse of the province-wide index');
+  assert.equal(new Set(d.lakes.map(lake => lake.id)).size, d.lakes.length, 'duplicate waterbody IDs');
+  assert.equal(d.summary.lakes, d.lakes.length);
+  assert.equal(d.summary.mappable, d.lakes.filter(lake => Number.isFinite(lake.latitude) && Number.isFinite(lake.longitude)).length);
+  assert.equal(d.summary.remoteScored, d.lakes.filter(lake => Number.isFinite(lake.remote?.score)).length);
+  assert.equal(d.summary.mappable + d.summary.unmapped, d.summary.lakes);
+  for (const field of ['unmapped', 'excludedNonLake', 'excludedUncertain', 'unionWaterbodyIds']) {
+    assert.ok(Number.isInteger(d.summary[field]) && d.summary[field] >= 0, field);
+  }
+  assert.equal(d.summary.lakes + d.summary.excludedNonLake + d.summary.excludedUncertain, d.summary.unionWaterbodyIds);
+  assert.deepEqual(d.summary.bySpecies, Object.fromEntries(remote.TROUT_SPECIES.map(species =>
+    [species, d.lakes.filter(lake => lake.species.includes(species)).length])));
+  for (const field of ['araFeatures', 'surveyFeatures', 'stockingFeatures']) assert.ok(d.summary[field] > 0, field);
+  assert.ok(d.lakes.every(lake => lake.id && Array.isArray(lake.species) && lake.species.length &&
+    Array.isArray(lake.evidence) && lake.evidence.length && lake.evidenceBySpecies && lake.remote &&
+    Object.hasOwn(lake.remote, 'score') && Object.hasOwn(lake.remote, 'confidence')));
+  for (const lake of d.lakes) for (const species of lake.species) {
+    assert.ok(Array.isArray(lake.evidenceBySpecies[species]) && lake.evidenceBySpecies[species].length,
+      `${lake.id} ${species} missing species provenance`);
+  }
+});
