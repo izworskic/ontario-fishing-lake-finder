@@ -13,6 +13,8 @@
     "node": ">=20"
   },
   "files": [
+    "api",
+    "lib",
     "public",
     "data"
   ]
