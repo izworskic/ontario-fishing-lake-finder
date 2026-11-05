@@ -142,7 +142,7 @@ test('a named lake with coordinates omitted from its catalog row is focused afte
   await pause(25);
   await app.ui.selectLake('ohn:1', true);
   assert.equal(app.map.zoom, 11);
-  assert.deepEqual(app.map.center, [47.25, -83.64]);
+  assert.deepEqual(Array.from(app.map.center), [47.25, -83.64]);
   assert.ok(app.requests.some(r => r.mode === 'detail'),
     'lake selection must fetch the full source record before focusing the map');
 });
