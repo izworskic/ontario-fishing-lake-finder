@@ -98,7 +98,7 @@ function mount() {
     if (mode === 'detail') return {ok:true,json:async()=>({lake:selectedLake})};
     return {ok:true,json:async()=>({lakes:[catalogLake],candidateCount:1,catalogMode:'ohn_all_lakes'})};
   }
-  const injected = inline.replace('syncChips();loadMap();search();', `globalThis.__lakeTest = {loadMap,search,selectLake,map,coverage,retryMap,areaButtons,maplabel,status};syncChips();loadMap();search();`);
+  const injected = inline.replace('syncChips();loadMap();', `globalThis.__lakeTest = {loadMap,search,selectLake,map,coverage,retryMap,areaButtons,maplabel,status};syncChips();loadMap();`);
   assert.notEqual(injected, inline, 'test hook must be inserted at script bootstrap');
   const context = {
     L, document: {getElementById: id => elements[id], createElement: () => fakeElement(), querySelectorAll: selector =>
@@ -118,6 +118,8 @@ test('first load avoids province-scale queries, explores different regions, and 
   await pause(25);
   assert.equal(app.map.zoom, 10, 'first visible map is a bounded Ontario lake area');
   assert.ok(app.requests.some(r => r.mode === 'map'), 'a local map query starts independently of the lake list');
+  assert.ok(!app.requests.some(r => r.mode === 'search'), 'first load never triggers costly province-wide catalog counting');
+  assert.match(app.elements.results.innerHTML, /Actual Lake/, 'the first useful named lake is present in local browse list');
   assert.ok(app.requests.filter(r => r.mode === 'map').every(r => {
     const b = r.bbox.split(',').map(Number);return b[2]-b[0]<2 && b[3]-b[1]<2;
   }), 'initial queries must be local, not a source-hostile province bbox');
@@ -140,6 +142,7 @@ test('first load avoids province-scale queries, explores different regions, and 
 test('a named lake with coordinates omitted from its catalog row is focused after source detail retrieval', async () => {
   const app = mount();
   await pause(25);
+  await app.ui.search();
   await app.ui.selectLake('ohn:1', true);
   assert.equal(app.map.zoom, 11);
   assert.deepEqual(Array.from(app.map.center), [47.25, -83.64]);
