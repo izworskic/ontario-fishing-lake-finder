@@ -50,7 +50,7 @@ test('API routes all-lakes search/map/detail through OHN while retaining fisheri
 test('frontend defaults to All lakes with no hidden Brook Trout auto-filter', () => {
   assert.match(html, /<option value="">All lakes<\/option>/);
   assert.match(html, /Start with every lake/);
-  assert.match(html, /syncChips\(\);search\(\);/);
+  assert.match(html, /syncChips\(\);loadMap\(\);/, 'the All lakes starter map does not require a province-wide count before browsing');
   assert.doesNotMatch(html, /species\.value\s*=\s*['"]Brook Trout['"]/);
 });
 
