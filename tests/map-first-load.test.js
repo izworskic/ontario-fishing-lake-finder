@@ -27,6 +27,7 @@ function fakeElement(dataset = {}) {
     setAttribute(name, value) { attrs[name] = String(value); },
     getAttribute(name) { return attrs[name] || null; },
     addEventListener(name, cb) { this.listeners[name] = cb; },
+    appendChild(child) { (this.children ||= []).push(child); return child; },
     querySelectorAll() { return []; },
     click() { if (this.listeners.click) return this.listeners.click(); if (this.onclick) return this.onclick(); }
   };
@@ -100,7 +101,7 @@ function mount() {
   const injected = inline.replace('syncChips();loadMap();search();', `globalThis.__lakeTest = {loadMap,search,selectLake,map,coverage,retryMap,areaButtons,maplabel,status};syncChips();loadMap();search();`);
   assert.notEqual(injected, inline, 'test hook must be inserted at script bootstrap');
   const context = {
-    L, document: {getElementById: id => elements[id], querySelectorAll: selector =>
+    L, document: {getElementById: id => elements[id], createElement: () => fakeElement(), querySelectorAll: selector =>
       selector === '.area-btn' ? regions : []},
     location: {origin:'https://example.test'}, navigator: {},
     URL, URLSearchParams, AbortController, setTimeout, clearTimeout,
