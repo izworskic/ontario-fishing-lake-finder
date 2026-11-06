@@ -34,16 +34,16 @@ function fakeElement(dataset = {}) {
 }
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function mount() {
+function mount({initialFailure=false}={}) {
   assert.ok(inline);
   const ids = ['form', 'q', 'species', 'fmz', 'thermal', 'depth', 'find', 'status', 'coverage',
     'results', 'count', 'detail', 'maplabel', 'listtitle', 'location', 'distance', 'maxdist',
     'clearFish', 'retry-map'];
   const elements = Object.fromEntries(ids.map(id => [id, fakeElement()]));
   const regions = [
-    ['Algoma', '47.15', '-83.75', '10'], ['Temagami', '47.06', '-79.78', '10'],
-    ['Nipigon', '49.03', '-88.26', '10'], ['Kenora', '49.76', '-94.49', '10'],
-    ['Muskoka', '45.08', '-79.51', '10'], ['Ontario overview', '49.2', '-84.7', '5']
+    ['Algoma', '47.15', '-83.75', '11'], ['Temagami', '47.06', '-79.78', '11'],
+    ['Nipigon', '49.03', '-88.26', '11'], ['Kenora', '49.76', '-94.49', '11'],
+    ['Muskoka', '45.08', '-79.51', '11'], ['Ontario overview', '49.2', '-84.7', '5']
   ].map(([name, lat, lon, zoom]) => {
     const item = fakeElement({ lat, lon, zoom });
     item.textContent = name;
@@ -75,7 +75,7 @@ function mount() {
     })
   };
   const requests = [];
-  let failMap = false;
+  let failMap = Boolean(initialFailure);
   let oversized = false;
   const catalogLake = {
     id: 'ohn:1', name: 'Actual Lake', latitude: null, longitude: null,
@@ -98,7 +98,7 @@ function mount() {
     if (mode === 'detail') return {ok:true,json:async()=>({lake:selectedLake})};
     return {ok:true,json:async()=>({lakes:[catalogLake],candidateCount:1,catalogMode:'ohn_all_lakes'})};
   }
-  const injected = inline.replace('syncChips();loadMap();', `globalThis.__lakeTest = {loadMap,search,selectLake,map,coverage,retryMap,areaButtons,maplabel,status};syncChips();loadMap();`);
+  const injected = inline.replace('syncChips();showStarterLakes();loadMap();', `globalThis.__lakeTest = {loadMap,search,selectLake,map,coverage,retryMap,areaButtons,maplabel,status};syncChips();showStarterLakes();loadMap();`);
   assert.notEqual(injected, inline, 'test hook must be inserted at script bootstrap');
   const context = {
     L, document: {getElementById: id => elements[id], createElement: () => fakeElement(), querySelectorAll: selector =>
@@ -116,7 +116,7 @@ function mount() {
 test('first load avoids province-scale queries, explores different regions, and exits safely to Ontario overview', async () => {
   const app = mount();
   await pause(25);
-  assert.equal(app.map.zoom, 10, 'first visible map is a bounded Ontario lake area');
+  assert.equal(app.map.zoom, 11, 'first visible map is a bounded Ontario lake area');
   assert.ok(app.requests.some(r => r.mode === 'map'), 'a local map query starts independently of the lake list');
   assert.ok(!app.requests.some(r => r.mode === 'search'), 'first load never triggers costly province-wide catalog counting');
   assert.match(app.elements.results.innerHTML, /Actual Lake/, 'the first useful named lake is present in local browse list');
@@ -133,10 +133,22 @@ test('first load avoids province-scale queries, explores different regions, and 
     'province overview must never request all Ontario polygon markers');
   app.regions[1].click();
   await pause(25);
-  assert.equal(app.map.zoom, 10);
+  assert.equal(app.map.zoom, 11);
   assert.ok(app.requests.filter(r => r.mode === 'map').length > before,
     'choosing another lake area starts a fresh local request');
   assert.equal(app.elements.coverage.classList?.contains?.('warn'), undefined);
+});
+
+test('first paint remains useful and candid when a live Ontario request fails', async () => {
+  const app=mount({initialFailure:true});
+  assert.match(app.elements.results.innerHTML,/Quinn Lake/);
+  assert.match(app.elements.coverage.textContent,/Dated OHN examples remain visible/);
+  assert.match(app.elements.status.innerHTML,/not the full lake inventory/);
+  assert.equal(app.elements['retry-map'].hidden,false);
+  assert.ok(!app.requests.some(r=>r.mode==='search'));
+  app.failMap(false);
+  await app.ui.retryMap.onclick();
+  assert.match(app.elements.coverage.textContent,/Complete local coverage/);
 });
 
 test('a named lake with coordinates omitted from its catalog row is focused after source detail retrieval', async () => {
